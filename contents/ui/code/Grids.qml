@@ -67,16 +67,7 @@ import org.kde.plasma.plasmoid 2.0
                 {
                     id: runnerGrid
                     width: rootItem.width
-                    height: visible ? (
-                        kicker.searching
-                        ? rootItem.resizeHeight()
-                        - ( (rowSearchField && rowSearchField.visible ? rowSearchField.height : 0)
-                        +  (footer && footer.visible ? footer.height : 0)
-                        +  Kirigami.Units.gridUnit )
-                        : (rootItem.resizeHeight() === 0
-                        ? rootItem.cuadricula_hg
-                        : rootItem.resizeHeight() - rootItem.visible_items)
-                    ) : 0
+                    height: rootItem.resizeHeight() == 0 ? rootItem.cuadricula_hg  : rootItem.resizeHeight() - rootItem.visible_items
                     cellWidth:   kicker.cellSizeWidth
                     cellHeight:  kicker.cellSizeHeight
                     enabled: (opacity == 1.0) ? 1 : 0

@@ -72,7 +72,7 @@ Item {
     Rectangle {
         id: delegateBox
         anchors.fill: parent
-        anchors.margins: 6
+        anchors.margins: 7
         radius: 16
 
         // Calculate dimensions
@@ -118,6 +118,7 @@ Item {
                 easing.type: Easing.Linear
             }
         }
+
         Column {
             id: contentColumn
             anchors.centerIn: parent
@@ -171,6 +172,12 @@ Item {
                                     }
                                     animated: false
                                     roundToIconSize: false
+                                    onStatusChanged: {
+                                        if (status === Image.Error || source === "") {
+                                            visible = false
+                                            console.log("ICON ERROR Ã¢â€ â€™ hidden:", source)
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -194,6 +201,13 @@ Item {
                         source: model.decoration || "application-x-executable"
                         animated: false
                         roundToIconSize: false
+
+                        onStatusChanged: {
+                            if (status === Image.Error) {
+                                console.log("ICON ERROR:", source)
+                                visible = false
+                            }
+                        }
                     }
                 }
             }
@@ -237,7 +251,7 @@ Item {
         }
     }
 
-    // --- TOOLTIP ---
+    // --- TOOLTIP WITH VISIBLE TEXT ---
     PlasmaCore.ToolTipArea {
         id: toolTip
         property string text: model.display || ""

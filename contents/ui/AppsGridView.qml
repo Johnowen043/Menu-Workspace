@@ -6,8 +6,6 @@ import org.kde.plasma.components as PlasmaComponents
 import org.kde.plasma.extras 2.0 as PlasmaExtras
 import org.kde.kirigami 2.20 as Kirigami
 
-// This extends your existing ItemGridView to add category navigation
-// Uses the SAME structure as your ItemGridView but adds directory support
 FocusScope {
     id: categoryItemGrid
 
@@ -29,22 +27,20 @@ FocusScope {
     property alias count: gridView.count
     property alias model: gridView.model
 
-    // ENFORCED SQUARE CELLS - cellHeight follows cellWidth
     property alias cellWidth: gridView.cellWidth
-    property int cellHeight: cellWidth  // Force square cells
+    property int cellHeight: cellWidth
     property alias iconSize: gridView.iconSize
 
     property alias flow: gridView.flow
     property alias snapMode: gridView.snapMode
 
+    // ✅ CHANGED: Default scrollbar policies to AlwaysOff
     property var horizontalScrollBarPolicy: PlasmaComponents.ScrollBar.AlwaysOff
-    property var verticalScrollBarPolicy: PlasmaComponents.ScrollBar.AlwaysOn
+    property var verticalScrollBarPolicy: PlasmaComponents.ScrollBar.AlwaysOff  // This was AlwaysOn before!
 
-    // NEW: Category navigation properties
     property var modelStack: []
     property var originalModel: null
 
-    // safer implicit size: don't directly access ScrollBar.* during init
     implicitWidth: scrollView ? scrollView.width : (parent ? parent.width : 400)
     implicitHeight: scrollView ? scrollView.height : 200
 
@@ -60,7 +56,6 @@ FocusScope {
         }
     }
 
-    // NEW: Category navigation functions
     function canGoBack() {
         return modelStack.length > 0;
     }
@@ -84,9 +79,7 @@ FocusScope {
         if (gridView.model && gridView.model.modelForRow) {
             var dirModel = gridView.model.modelForRow(directoryIndex);
             if (dirModel && dirModel.hasChildren) {
-                // Save current model to stack
                 modelStack.push(gridView.model);
-                // Switch to directory model
                 gridView.model = dirModel;
                 currentIndex = -1;
                 tryActivate(0, 0);
@@ -94,7 +87,6 @@ FocusScope {
         }
     }
 
-    // Updated functions for square grid calculations
     function currentRow() {
         if (currentIndex === -1) {
             return -1;
@@ -132,14 +124,11 @@ FocusScope {
         gridView.forceLayout();
     }
 
-    // MODIFIED: Enhanced trigger function with category and empty space support
     function trigger(index) {
         if (index === -1 || index >= count) {
-            // Empty space clicked - handle navigation
             if (canGoBack()) {
                 goBack();
             } else {
-                // At root level - close menu
                 kicker.expanded = false;
             }
             return;
@@ -149,20 +138,17 @@ FocusScope {
         if (item && item.modelForRow) {
             var dirModel = item.modelForRow(index);
             if (dirModel && dirModel.hasChildren) {
-                // This is a directory - enter it
                 enterDirectory(index);
                 return;
             }
         }
 
-        // Regular app trigger - same as your original
         if ("trigger" in gridView.model) {
             gridView.model.trigger(index, "", null);
-            kicker.expanded = false; // Close menu
+            kicker.expanded = false;
         }
     }
 
-    // Your existing ActionMenu - unchanged
     ActionMenu {
         id: actionMenu
         onActionClicked: {
@@ -178,7 +164,6 @@ FocusScope {
         }
     }
 
-    // Your existing DropArea - unchanged (but updated for square cells)
     DropArea {
         id: dropArea
         anchors.fill: parent
@@ -247,36 +232,29 @@ FocusScope {
             }
         }
 
-        // Updated ScrollView structure for square cells
         PlasmaComponents.ScrollView {
             id: scrollView
             anchors.fill: parent
             focus: true
 
-                // ensure ScrollBar objects exist and policy is set
-                PlasmaComponents.ScrollBar.horizontal: PlasmaComponents.ScrollBar { policy: categoryItemGrid.horizontalScrollBarPolicy }
-                PlasmaComponents.ScrollBar.vertical: PlasmaComponents.ScrollBar   { policy: categoryItemGrid.verticalScrollBarPolicy }
-
-                // rest of ScrollView...
+            // ✅ EXPLICIT SCROLLBAR POLICY OVERRIDE
+            PlasmaComponents.ScrollBar.horizontal.policy: PlasmaComponents.ScrollBar.AlwaysOff
+            PlasmaComponents.ScrollBar.vertical.policy: PlasmaComponents.ScrollBar.AlwaysOff
 
             GridView {
                 id: gridView
-                // ensure width follows parent but has safe fallback
-                width: categoryItemGrid.width > 0 ? categoryItemGrid.width : 400
-                // DO NOT force height = categoryItemGrid.height
-                // Let grid compute implicitHeight based on item count
+                anchors.fill: parent
+
                 implicitHeight: {
                     var w = width > 0 ? width : 400;
                     var cW = cellWidth > 0 ? cellWidth : 120;
-                    var cH = cellHeight > 0 ? cellHeight : (cW); // square fallback
+                    var cH = cellHeight > 0 ? cellHeight : (cW);
                     var cols = Math.max(1, Math.floor(w / cW));
                     var rows = Math.ceil(count / cols);
                     return rows * cH;
                 }
 
-                // Optionally set height to implicitHeight so parent scroll area can size
                 height: implicitHeight
-
 
                 signal itemContainsMouseChanged(bool containsMouse)
 
@@ -287,8 +265,7 @@ FocusScope {
                 focus: true
                 currentIndex: -1
 
-                // ENFORCED SQUARE CELLS
-                cellHeight: cellWidth  // This ensures square cells
+                cellHeight: cellWidth
 
                 move: Transition {
                     enabled: categoryItemGrid.dropEnabled
@@ -319,43 +296,16 @@ FocusScope {
                 keyNavigationWraps: false
                 boundsBehavior: Flickable.StopAtBounds
 
-                // USE THE NEW SQUARE DELEGATE
                 delegate: ItemGridDelegate {
                     showLabel: categoryItemGrid.showLabels
                 }
 
-                highlight: Item {
-                    property bool isDropPlaceHolder: "dropPlaceholderIndex" in categoryItemGrid.model
-                    && categoryItemGrid.currentIndex === categoryItemGrid.model.dropPlaceholderIndex
-                        visible: false
-
-                    KSvg.FrameSvgItem {
-                        visible: gridView.currentItem && isDropPlaceHolder
-                        anchors.fill: parent
-                        imagePath: "widgets/viewitem"
-                        prefix: "selected"
-                        opacity: 0.5
-
-                        Kirigami.Icon {
-                            anchors {
-                                right: parent.right
-                                rightMargin: parent.margins.right
-                                bottom: parent.bottom
-                                bottomMargin: parent.margins.bottom
-                            }
-                            width: Kirigami.Units.iconSizes.smallMedium
-                            height: width
-                            source: "list-add"
-                            active: false
-                        }
-                    }
-                }
-
-                highlightFollowsCurrentItem: true
+                highlight: null
+                highlightFollowsCurrentItem: false
                 highlightMoveDuration: 0
 
                 onCurrentIndexChanged: {
-                    if (currentIndex !== -1) {
+                    if (currentIndex !== -1 && hoverArea) {
                         hoverArea.hoverEnabled = false
                         focus = true;
                     }
@@ -364,22 +314,15 @@ FocusScope {
                 onCountChanged: {
                     animationDuration = 0;
                     resetAnimationDurationTimer.start();
-                    var w = width > 0 ? width : 400;
-                    var cW = cellWidth > 0 ? cellWidth : 120;
-                    var cols = Math.max(1, Math.floor(w / cW));
-                    var rows = Math.ceil(count / cols);
-                    console.log("SAFE gridView count:", count, "cols:", cols, "rows:", rows, "implicitHeight:", implicitHeight, "width:", width);
                 }
 
                 onModelChanged: {
                     currentIndex = -1;
-                    // Store original model for reset function
                     if (!categoryItemGrid.originalModel) {
                         categoryItemGrid.originalModel = model;
                     }
                 }
 
-                // Updated key navigation for square grid
                 Keys.onLeftPressed: function (event) {
                     if (currentIndex == -1) {
                         currentIndex = 0;
@@ -482,7 +425,7 @@ FocusScope {
                 }
 
                 onItemContainsMouseChanged: containsMouse => {
-                    if (!containsMouse) {
+                    if (!containsMouse && hoverArea) {
                         hoverArea.pressX = -1;
                         hoverArea.pressY = -1;
                         hoverArea.lastX = -1;
@@ -494,11 +437,9 @@ FocusScope {
             }
         }
 
-        // Your existing MouseArea - unchanged
         MouseArea {
             id: hoverArea
-            width:  categoryItemGrid.width - Kirigami.Units.gridUnit
-            height: categoryItemGrid.height
+            anchors.fill: parent
 
             property int pressX: -1
             property int pressY: -1
@@ -558,16 +499,15 @@ FocusScope {
 
                 if (typeof dragHelper === 'undefined' || !dragHelper.dragging) {
                     if (pressedItem && gridView.currentIndex !== -1) {
-                        // Clicked on an item - use new trigger function
                         categoryItemGrid.trigger(gridView.currentIndex);
                     } else if (mouse.button === Qt.LeftButton) {
-                        // Clicked on empty space - trigger with -1
                         categoryItemGrid.trigger(-1);
                     }
                 }
                 pressX = pressY = -1;
                 pressedItem = null;
             }
+
             onPressAndHold: mouse => {
                 if (!dragEnabled) {
                     pressX = -1;

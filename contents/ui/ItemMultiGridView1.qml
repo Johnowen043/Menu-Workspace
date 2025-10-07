@@ -80,21 +80,34 @@ PlasmaComponents.ScrollView {
         id: flickable
 
         flickableDirection: Flickable.VerticalFlick
-        contentHeight: itemColumn.implicitHeight
-        //focusPolicy: Qt.NoFocus
+        // FIXED: Force contentHeight to be at least the sum of all visible content
+        contentHeight: itemColumn.height  // Use actual height instead of implicitHeight
+        contentWidth: width
+        clip: true
+
+        boundsBehavior: Flickable.StopAtBounds
+        interactive: contentHeight > height
+
+        maximumFlickVelocity: 2500
+        flickDeceleration: 1500
+
+        // ADD DEBUG
+        onContentHeightChanged: {
+            console.log("DEBUG Flickable -> contentHeight:", contentHeight, "itemColumn.height:", itemColumn.height, "itemColumn.implicitHeight:", itemColumn.implicitHeight);
+        }
 
         Column {
             id: itemColumn
 
-            width: itemMultiGrid.width - Kirigami.Units.gridUnit
+            width: parent.width - Kirigami.Units.gridUnit
 
             Repeater {
                 id: repeater
 
                 delegate: Item {
                     width: itemColumn.width
-                    height: gridView.height + gridViewLabel.height +  Kirigami.Units.largeSpacing * 2
-                    visible:  gridView.count > 0
+                    height: gridView.count > 0 ? (gridView.height + gridViewLabel.height + Kirigami.Units.largeSpacing * 2) : 0
+                    visible: gridView.count > 0
 
                     property Item itemGrid: gridView
 
@@ -147,7 +160,7 @@ PlasmaComponents.ScrollView {
                         }
 
                         width: parent.width
-                        height: Math.ceil(count / Plasmoid.configuration.numberColumns) * itemMultiGrid.cellHeight
+                        height: Math.ceil(gridView.count / Plasmoid.configuration.numberColumns) * itemMultiGrid.cellHeight
                         cellWidth: itemMultiGrid.cellWidth
                         cellHeight: itemMultiGrid.cellHeight
                         iconSize: kicker.iconSize

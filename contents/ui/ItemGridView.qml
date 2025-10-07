@@ -192,78 +192,10 @@ FocusScope {
         }
     }
 
-    // Enhanced path indicator with better styling (without RowLayout)
-    Rectangle {
-        id: pathIndicator
-        visible: currentPath !== "" && canGoBack()
-        height: 35
-        width: parent.width
-        color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.9)
-        border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1)
-        border.width: 1
-        z: 100
-
-        // Subtle shadow effect
-        Rectangle {
-            anchors.fill: parent
-            anchors.topMargin: 1
-            color: Qt.rgba(0, 0, 0, 0.05)
-            radius: 2
-            z: -1
-        }
-
-        // Back button
-        Rectangle {
-            id: backButton
-            anchors.left: parent.left
-            anchors.leftMargin: 8
-            anchors.verticalCenter: parent.verticalCenter
-            width: 24
-            height: 24
-            radius: 12
-            color: backButtonArea.containsMouse ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.2) : "transparent"
-
-            Text {
-                anchors.centerIn: parent
-                text: "◀"
-                color: Kirigami.Theme.textColor
-                font.pointSize: 12
-            }
-
-            MouseArea {
-                id: backButtonArea
-                anchors.fill: parent
-                hoverEnabled: true
-                onClicked: goBack()
-                cursorShape: Qt.PointingHandCursor
-            }
-
-            Behavior on color {
-                ColorAnimation { duration: 150 }
-            }
-        }
-
-        // Path text
-        Text {
-            anchors.left: backButton.right
-            anchors.leftMargin: 8
-            anchors.right: parent.right
-            anchors.rightMargin: 8
-            anchors.verticalCenter: parent.verticalCenter
-            text: currentPath
-            color: Kirigami.Theme.textColor
-            font.pointSize: 11
-            font.weight: Font.Medium
-            elide: Text.ElideMiddle
-        }
-    }
-
     // Your existing DropArea - same structure
     DropArea {
         id: dropArea
         anchors.fill: parent
-        anchors.topMargin: pathIndicator.visible ? pathIndicator.height : 0
-
         onPositionChanged: event => {
             if (!categoryGrid.dropEnabled || gridView.animating || !kicker.dragSource) {
                 return;
@@ -325,7 +257,7 @@ FocusScope {
                 property bool animating: false
                 property int animationDuration: categoryGrid.dropEnabled ? 120 : 0
 
-                focus: true
+                focus: false
                 currentIndex: -1
 
                 keyNavigationWraps: false
@@ -333,10 +265,7 @@ FocusScope {
 
                 // Replace the existing highlight section in ItemGridView.qml with this:
 
-                highlight: Item {
-                    // No default highlight - rainbow border in delegate handles this
-                    visible: false
-                }
+                highlight: null
 
                 // Also ensure the delegate uses the enhanced version:
                 delegate: ItemGridDelegate {
@@ -344,7 +273,7 @@ FocusScope {
                 }
 
 
-                highlightFollowsCurrentItem: true
+                highlightFollowsCurrentItem: false
                 highlightMoveDuration: 0
 
                 onCurrentIndexChanged: {

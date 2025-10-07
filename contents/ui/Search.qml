@@ -1,320 +1,371 @@
+import QtQuick 2.15
+import QtQuick.Layouts 1.15
 import org.kde.plasma.components 3.0 as PC3
-import org.kde.plasma.private.kicker 0.1 as Kicker
-import org.kde.coreaddons 1.0 as KCoreAddons
-import org.kde.kquickcontrolsaddons 2.0
-import org.kde.plasma.private.quicklaunch 1.0
-import QtQuick.Controls 2.15
-import org.kde.ksvg 1.0 as KSvg
-import org.kde.plasma.plasma5support 2.0 as P5Support
-import Qt5Compat.GraphicalEffects
-import QtQuick 2.4
-import QtQuick.Layouts 1.1
-import QtQml 2.15
-import org.kde.kirigami 2.0  as Kirigami
-import org.kde.plasma.plasmoid 2.0
-import org.kde.kcmutils as KCM
-import org.kde.plasma.private.sessions as Sessions
+import org.kde.plasma.core as PlasmaCore
+import org.kde.kirigami 2.20 as Kirigami
 
-Item
-{
-    // Enhanced search runners configuration based on plasma-drawer approach
-    property var searchRunners: getFilteredSearchRunners()
+Item {
+    id: searchComponent
 
-    // Configuration for hiding categories (like plasma-drawer)
-    property bool hideAllAppsCategory: Plasmoid.configuration.hideAllAppsCategory || true
-    property bool hidePowerCategory: Plasmoid.configuration.hidePowerCategory || true
-    property bool hideSessionsCategory: Plasmoid.configuration.hideSessionsCategory || true
+    property alias searchField: searchInput
+    property bool hasResults: runnerModel ? runnerModel.count > 0 : false
 
-    // Complete list of available runners for search functionality
-    readonly property var availableRunners: [
-        "krunner_services",           // Applications
-        "krunner_systemsettings",     // System Settings
-        "krunner_sessions",           // Desktop Sessions
-        "krunner_powerdevil",         // Power Management
-        "calculator",                 // Calculator
-        "unitconverter",             // Unit Converter
-        "krunner_bookmarksrunner",   // Bookmarks
-        "krunner_recentdocuments",   // Recent Files
-        "krunner_placesrunner",      // Places
-        "baloosearch",               // File Search
-        "krunner_shell",             // Command Line
-        "krunner_webshortcuts",      // Web Search
-        "locations",                 // Locations
-        "krunner_dictionary",        // Dictionary
-        "krunner_kill",              // Terminate Applications
-        "krunner_kwin",              // KWin
-        "windows",                   // Windows
-        "krunner_appstream"          // Software Center
-    ]
+    property bool allAppsActive: false
+    property bool favoritesActive: false
 
-    // Enhanced search runners filtering function
-    function getFilteredSearchRunners() {
-        var runners = [];
+    signal allAppsToggled()
+    signal favoritesToggled()
 
-        // Always include essential runners for search functionality
-        runners.push("krunner_services");  // Essential for finding applications
-        runners.push("krunner_systemsettings");
-        runners.push("calculator");
-        runners.push("unitconverter");
+    implicitHeight: 40
 
-        // Add file and document search
-        runners.push("baloosearch");
-        runners.push("krunner_recentdocuments");
-        runners.push("krunner_placesrunner");
+    RowLayout {
+        anchors.fill: parent
+        spacing: 8
 
-        // Add web and bookmark search
-        runners.push("krunner_bookmarksrunner");
-        runners.push("krunner_webshortcuts");
+        // Main search container
+        Rectangle {
+            id: searchContainer
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            Layout.maximumHeight: 40
+            radius: 20
+            color: "white"
+            border.width: 1
+            border.color: searchInput.activeFocus ? Kirigami.Theme.highlightColor : Qt.rgba(0, 0, 0, 0.2)
 
-        // Add utility runners
-        runners.push("krunner_shell");
-        runners.push("locations");
-        runners.push("windows");
-        runners.push("krunner_dictionary");
-        runners.push("krunner_kill");
-        runners.push("krunner_kwin");
-        runners.push("krunner_appstream");
+            Behavior on border.color {
+                ColorAnimation { duration: 200 }
+            }
 
-        // Conditionally add runners based on configuration
-        if (!hideSessionsCategory) {
-            runners.push("krunner_sessions");
-        }
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 12
+                anchors.rightMargin: 12
+                spacing: 8
 
-        if (!hidePowerCategory) {
-            runners.push("krunner_powerdevil");
-        }
+                Kirigami.Icon {
+                    id: searchIcon
+                    Layout.preferredWidth: 20
+                    Layout.preferredHeight: 20
+                    source: "search"
+                    color: Qt.rgba(0, 0, 0, 0.5)
+                }
 
-        // Add any extra runners from configuration
-        if (Plasmoid.configuration.useExtraRunners && Plasmoid.configuration.extraRunners) {
-            var extraRunners = Plasmoid.configuration.extraRunners;
-            for (var i = 0; i < extraRunners.length; i++) {
-                if (runners.indexOf(extraRunners[i]) === -1) {
-                    runners.push(extraRunners[i]);
+                PC3.TextField {
+                    id: searchInput
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+
+                    placeholderText: i18n("Type here to search...")
+                    cursorVisible: activeFocus
+                    selectByMouse: true
+
+                    background: Rectangle {
+                        color: "transparent"
+                    }
+
+                    color: "black"
+                    font.pointSize: 10
+                    font.weight: Font.Normal
+
+                    onTextChanged: {
+                        var query = text.trim();
+                        var isSearching = (query.length > 0);
+                        if (kicker.searching !== isSearching) {
+                            kicker.searching = isSearching;
+                        }
+
+                        if (isSearching) {
+                            searchUpdateTimer.restart();
+                        } else {
+                            searchUpdateTimer.stop();
+                            if (runnerModel) {
+                                runnerModel.query = "";
+                            }
+                        }
+                    }
+
+                    Timer {
+                        id: searchUpdateTimer
+                        interval: 300
+                        repeat: false
+                        onTriggered: {
+                            var query = searchInput.text.trim();
+                            if (typeof runnerModel !== "undefined" && runnerModel) {
+                                runnerModel.query = query;
+                            }
+                        }
+                    }
+
+                    Keys.onPressed: function(event) {
+                        if (event.key === Qt.Key_Down) {
+                            event.accepted = true;
+                            if (kicker.searching && searchGrid && searchGrid.visible) {
+                                searchGrid.forceActiveFocus();
+                                searchGrid.selectFirst();
+                            } else {
+                                if (rootItem.showCategorizedApps && categoryGrid) {
+                                    categoryGrid.forceActiveFocus();
+                                } else if (globalFavoritesGrid && globalFavoritesGrid.visible) {
+                                    globalFavoritesGrid.forceActiveFocus();
+                                }
+                            }
+                        } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                            event.accepted = true;
+                            if (kicker.searching && searchGrid && searchGrid.visible) {
+                                searchGrid.triggerSelected();
+                            }
+                        } else if (event.key === Qt.Key_Escape) {
+                            event.accepted = true;
+                            if (text.length > 0) {
+                                clearSearch();
+                            } else {
+                                kicker.expanded = false;
+                            }
+                        }
+                    }
+
+                    onActiveFocusChanged: {
+                        if (activeFocus) {
+                            selectAll();
+                        }
+                    }
+                }
+
+                PC3.ToolButton {
+                    id: clearButton
+                    Layout.preferredWidth: 24
+                    Layout.preferredHeight: 24
+                    visible: searchInput.text.length > 0
+                    opacity: visible ? 1.0 : 0.0
+
+                    icon.name: "edit-clear"
+                    icon.width: 16
+                    icon.height: 16
+
+                    Behavior on opacity {
+                        NumberAnimation { duration: 150 }
+                    }
+
+                    onClicked: {
+                        clearSearch();
+                        searchInput.forceActiveFocus();
+                    }
                 }
             }
         }
 
-        console.log("Search runners configured:", runners);
-        return runners;
-    }
+        // Star button (Favorites) - FIXED
+        PC3.ToolButton {
+            id: favoritesButton
+            Layout.preferredWidth: 40
+            Layout.preferredHeight: 40
 
-    RowLayout
-    {
-        id: searchComponent
-        width: rootItem.resizeWidth() == 0 ? rootItem.calc_width : rootItem.resizeWidth()
+            checkable: true
+            checked: searchComponent.favoritesActive
+            hoverEnabled: true
 
-        PC3.TextField {
-            id: searchField
-            visible: rootItem.searchvisible
-            Layout.fillWidth: true
-            placeholderText: i18n("Type here to search ...")
-            topPadding: 10
-            bottomPadding: 10
-            focus: true
-            leftPadding: Kirigami.Units.gridUnit + Kirigami.Units.iconSizes.small
-            text: ""
-            font.pointSize: Kirigami.Theme.defaultFont.pointSize + 2
+            icon.name: checked ? "starred-symbolic" : "non-starred-symbolic"
+            icon.width: 24
+            icon.height: 24
+            icon.color: checked ? Kirigami.Theme.highlightColor : Qt.rgba(0, 0, 0, 0.6)
 
             background: Rectangle {
-                anchors.fill: parent
-                radius: height / 2
-                color: Kirigami.Theme.backgroundColor
-                border.color: Qt.rgba(0,0,0,0.3)
-                border.width: 1
+                radius: 8
+                color: favoritesButton.checked ?
+                Qt.rgba(Kirigami.Theme.highlightColor.r,
+                        Kirigami.Theme.highlightColor.g,
+                        Kirigami.Theme.highlightColor.b, 0.15) :
+                        favoritesButton.hovered ?
+                        Qt.rgba(0, 0, 0, 0.05) :
+                        "transparent"
+
+                        Behavior on color { ColorAnimation { duration: 150 } }
             }
 
-            onTextChanged: {
-                kicker.searching = text !== "";
-                if (text === "") {
-                    runnerModel.query = "";
-                } else {
-                    runnerModel.query = text;
-                    // Keep only apps - as you originally wanted
-                    runnerModel.runners = ["krunner_services"];
-                }
+            onClicked: {
+                console.log("FAVORITES BUTTON CLICKED");
+                searchComponent.favoritesToggled();
             }
 
-            // Component initialization with comprehensive search runners
-            Component.onCompleted: {
-                // Set comprehensive search runners for better app finding
-                if (runnerModel) {
-                    runnerModel.runners = searchRunners;
-                    console.log("Initial search runners set:", searchRunners);
-                }
-            }
+            // FIXED: Visible tooltip with black text
+            PC3.ToolTip {
+                text: i18n("Favorites")
+                visible: parent.hovered
+                delay: 500
 
-            Keys.onPressed:(event)=>
-            {
-                kicker.keyIn = "search : " + event.key;
-                if(event.modifiers & Qt.ControlModifier ||event.modifiers & Qt.ShiftModifier)
-                {
-                    focus:true;
-                    return;
+                // Make tooltip visible with dark text
+                contentItem: PC3.Label {
+                    text: i18n("Favorites")
+                    color: "black"
                 }
-                else if (event.key === Qt.Key_Tab)
-                {
-                    event.accepted = true;
-                    focus:true;
-                }
-                else if (event.key === Qt.Key_Escape)
-                {
-                    event.accepted = true;
-                    rootItem.turnclose()
-                }
-            }
 
-            function backspace()
-            {
-                if (!kicker.expanded)
-                {
-                    return;
+                background: Rectangle {
+                    color: "white"
+                    border.color: Qt.rgba(0, 0, 0, 0.2)
+                    border.width: 1
+                    radius: 4
                 }
-                focus = true;
-                text = text.slice(0, -1);
-                if (text=="" || searchField.text == "")
-                {
-                    searchField.text = "";
-                    reset()
-                }
-            }
-
-            function appendText(newText)
-            {
-                if (!kicker.expanded)
-                {
-                    return;
-                }
-                kicker.searching=true;
-                focus = true;
-                text = text + newText;
-            }
-
-            Kirigami.Icon
-            {
-                source: 'search'
-                anchors
-                {
-                    left: searchField.left
-                    verticalCenter: searchField.verticalCenter
-                    leftMargin: Kirigami.Units.smallSpacing * 2
-                }
-                height: Kirigami.Units.iconSizes.small
-                width: height
             }
         }
 
-        Item {Layout.fillWidth: true}
+        // Grid button (All Apps) - Windows logo style
+        PC3.ToolButton {
+            id: allAppsButton
+            Layout.preferredWidth: 40
+            Layout.preferredHeight: 40
 
-        PC3.ToolButton
-        {
-            id: btnFavorites
-            icon.name: 'favorites'
-            visible: rootItem.searchvisible
-            flat: !kicker.showFavorites
-            onClicked:
-            {
-                kicker.showFavorites = true
-                rootItem.showCategorizedApps = false
-                rootItem.showAllAppsView = false
-                searchField.text = "";
-                rootItem.reset()
+            checkable: true
+            checked: searchComponent.allAppsActive
+
+            contentItem: Item {
+                implicitWidth: 20
+                implicitHeight: 20
+
+                // Windows logo: 4 squares in 2x2 grid
+                Column {
+                    anchors.centerIn: parent
+                    spacing: 3
+
+                    Row {
+                        spacing: 3
+                        Rectangle {
+                            width: 7
+                            height: 7
+                            radius: 1
+                            color: allAppsButton.checked ?
+                            Kirigami.Theme.highlightColor :
+                            Qt.rgba(0, 0, 0, 0.6)
+                            opacity: allAppsButton.hovered || allAppsButton.checked ? 1.0 : 0.7
+
+                            Behavior on color { ColorAnimation { duration: 150 } }
+                            Behavior on opacity { NumberAnimation { duration: 150 } }
+                        }
+                        Rectangle {
+                            width: 7
+                            height: 7
+                            radius: 1
+                            color: allAppsButton.checked ?
+                            Kirigami.Theme.highlightColor :
+                            Qt.rgba(0, 0, 0, 0.6)
+                            opacity: allAppsButton.hovered || allAppsButton.checked ? 1.0 : 0.7
+
+                            Behavior on color { ColorAnimation { duration: 150 } }
+                            Behavior on opacity { NumberAnimation { duration: 150 } }
+                        }
+                    }
+
+                    Row {
+                        spacing: 3
+                        Rectangle {
+                            width: 7
+                            height: 7
+                            radius: 1
+                            color: allAppsButton.checked ?
+                            Kirigami.Theme.highlightColor :
+                            Qt.rgba(0, 0, 0, 0.6)
+                            opacity: allAppsButton.hovered || allAppsButton.checked ? 1.0 : 0.7
+
+                            Behavior on color { ColorAnimation { duration: 150 } }
+                            Behavior on opacity { NumberAnimation { duration: 150 } }
+                        }
+                        Rectangle {
+                            width: 7
+                            height: 7
+                            radius: 1
+                            color: allAppsButton.checked ?
+                            Kirigami.Theme.highlightColor :
+                            Qt.rgba(0, 0, 0, 0.6)
+                            opacity: allAppsButton.hovered || allAppsButton.checked ? 1.0 : 0.7
+
+                            Behavior on color { ColorAnimation { duration: 150 } }
+                            Behavior on opacity { NumberAnimation { duration: 150 } }
+                        }
+                    }
+                }
             }
-            ToolTip.delay: 200
-            ToolTip.timeout: 1000
-            ToolTip.visible: hovered
-            ToolTip.text: i18n("Favorites")
-        }
 
-        PC3.ToolButton
-        {
-            icon.name: "view-list-icons"
-            flat: kicker.showFavorites || rootItem.showAllAppsView
-            visible: rootItem.searchvisible
-            onClicked:
-            {
-                // Show All Apps view instead of regular grid
-                kicker.showFavorites = false
-                rootItem.showCategorizedApps = false
-                searchField.text = "";
-                rootItem.showAllApps(); // Call the enhanced showAllApps function
+            background: Rectangle {
+                radius: 8
+                color: allAppsButton.checked ?
+                Qt.rgba(Kirigami.Theme.highlightColor.r,
+                        Kirigami.Theme.highlightColor.g,
+                        Kirigami.Theme.highlightColor.b, 0.15) :
+                        allAppsButton.hovered ?
+                        Qt.rgba(0, 0, 0, 0.05) :
+                        "transparent"
+
+                        Behavior on color { ColorAnimation { duration: 150 } }
             }
-            ToolTip.delay: 200
-            ToolTip.timeout: 1000
-            ToolTip.visible: hovered
-            ToolTip.text: i18n("All apps")
-        }
 
-        // REMOVED: The view switch button is no longer here
-        // Users will use Category view by default, and "All apps" button for complete list
+            onClicked: {
+                console.log("ALL APPS BUTTON CLICKED");
+                searchComponent.allAppsToggled();
+            }
+
+            // FIXED: Visible tooltip with black text
+            PC3.ToolTip {
+                text: i18n("All Applications")
+                visible: parent.hovered
+                delay: 500
+
+                contentItem: PC3.Label {
+                    text: i18n("All Applications")
+                    color: "black"
+                }
+
+                background: Rectangle {
+                    color: "white"
+                    border.color: Qt.rgba(0, 0, 0, 0.2)
+                    border.width: 1
+                    radius: 4
+                }
+            }
+        }
     }
 
+    function gofocus() {
+        searchInput.forceActiveFocus();
+        searchInput.selectAll();
+    }
 
+    function appendText(newText) {
+        if (newText && newText.length > 0) {
+            searchInput.text += newText;
+            searchInput.cursorPosition = searchInput.text.length;
+            gofocus();
+        }
+    }
+
+    function backspace() {
+        if (searchInput.text.length > 0) {
+            searchInput.text = searchInput.text.slice(0, -1);
+            searchInput.cursorPosition = searchInput.text.length;
+            gofocus();
+        }
+    }
+
+    function emptysearch() {
+        searchInput.text = "";
+        if (runnerModel) {
+            runnerModel.query = "";
+        }
+        kicker.searching = false;
+    }
+
+    function clearSearch() {
+        emptysearch();
+    }
+
+    Connections {
+        target: typeof runnerModel !== "undefined" ? runnerModel : null
+
+        function onCountChanged() {
+            searchComponent.hasResults = runnerModel.count > 0;
+        }
+    }
 
     Component.onCompleted: {
-        // Set comprehensive search runners for better app finding
-        if (runnerModel) {
-            runnerModel.runners = searchRunners;
-            console.log("Initial search runners set:", searchRunners);
-        }
-    }
-
-    // Monitor configuration changes
-    Connections {
-        target: Plasmoid.configuration
-        function onUseExtraRunnersChanged() {
-            searchRunners = getFilteredSearchRunners();
-            if (runnerModel) {
-                runnerModel.runners = searchRunners;
-            }
-        }
-        function onExtraRunnersChanged() {
-            searchRunners = getFilteredSearchRunners();
-            if (runnerModel) {
-                runnerModel.runners = searchRunners;
-            }
-        }
-        function onHideAllAppsCategoryChanged() {
-            searchRunners = getFilteredSearchRunners();
-            if (runnerModel) {
-                runnerModel.runners = searchRunners;
-            }
-        }
-        function onHidePowerCategoryChanged() {
-            searchRunners = getFilteredSearchRunners();
-            if (runnerModel) {
-                runnerModel.runners = searchRunners;
-            }
-        }
-        function onHideSessionsCategoryChanged() {
-            searchRunners = getFilteredSearchRunners();
-            if (runnerModel) {
-                runnerModel.runners = searchRunners;
-            }
-        }
-    }
-
-    // Helper functions
-    function isRunnerEnabled(runnerId) {
-        return searchRunners.includes(runnerId);
-    }
-
-    function emptysearch()
-    {
-        searchField.text = "";
-    }
-
-    function backspace()
-    {
-        searchField.backspace();
-    }
-
-    function appendText(p)
-    {
-        searchField.appendText(p);
-    }
-
-    function gofocus()
-    {
-        searchField.focus = true;
+        console.log("Search component with Windows logo button initialized");
     }
 }
